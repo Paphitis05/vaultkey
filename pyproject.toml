@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "vaultkey"
 version = "0.1.0"
-description = "A small, local, encrypted password manager for the command line"
+description = "A small, local, encrypted password manager with a graphical interface"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -16,7 +16,7 @@ dependencies = ["cryptography>=41"]
 test = ["pytest>=7"]
 
 [project.scripts]
-vaultkey = "vaultkey.cli:main"
+vaultkey = "vaultkey.app:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

@@ -1,6 +1,6 @@
 # vaultkey
 
-A small, local, encrypted password manager for the command line.
+A small, local, encrypted password manager app with a graphical interface.
 
 > **Limitations:** vaultkey is an unaudited learning project. It has not been
 > reviewed by security professionals. Do not rely on it to protect secrets you
@@ -13,7 +13,7 @@ A small, local, encrypted password manager for the command line.
 - Wrong passwords and tampered files are detected and reported clearly
 - Atomic writes with `0600` file permissions
 - Built-in secure password generator
-- Local web interface (`vaultkey ui`) alongside the CLI
+- Graphical app that runs locally in your browser; nothing leaves your machine
 - No network access, no daemon, no telemetry
 
 ## Install
@@ -32,37 +32,26 @@ For development: `pip install -e '.[test]' && pytest`.
 ## Usage
 
 ```sh
-vaultkey init                         # create a vault (master password >= 12 chars)
-vaultkey add github --username me     # prompts for the entry password
-vaultkey add bank --generate --length 24 --no-symbols
-vaultkey add github --overwrite       # replace an existing entry
-vaultkey get github                   # password hidden
-vaultkey get github --show            # reveal the password
-vaultkey list
-vaultkey rm github
-vaultkey passwd                       # change the master password
-vaultkey gen --length 32 --no-ambiguous
+vaultkey
 ```
 
-### Web interface
+This starts the app on `127.0.0.1` and opens it in your browser. On first run
+you create a vault with a master password of at least 12 characters; after
+that you unlock it. In the app you can:
 
-```sh
-vaultkey ui              # starts a server on 127.0.0.1 and opens your browser
-vaultkey ui --no-browser --port 8765
-```
+- search, add, edit and delete entries (name, username, URL, password, notes)
+- generate passwords (length, symbols, no look-alike characters)
+- show or copy a password (the clipboard is cleared after 20 seconds if it
+  still holds that password)
+- change the master password, or lock the vault
 
-The UI lets you create or unlock the vault, search, add, edit and delete
-entries, generate passwords, copy a password (the clipboard is cleared after
-20 seconds if it still holds it), and change the master password. It only
-listens on `127.0.0.1`, requires a one-time link printed in the terminal,
-rejects foreign `Host` headers and cross-site requests, and locks itself after
-5 minutes of inactivity. The page uses no external resources.
+Options: `--vault PATH`, `--port N`, `--no-browser` (only print the link). The
+vault location is chosen in this order: `--vault`, the `VAULTKEY_PATH`
+environment variable, then `~/.vaultkey/vault.json`.
 
-The vault location is chosen in this order: `--vault PATH`, the
-`VAULTKEY_PATH` environment variable, then `~/.vaultkey/vault.json`.
-
-`add` accepts `--username`, `--url` and `--notes`. `gen` and `add --generate`
-accept `--length`, `--no-symbols` and `--no-ambiguous`.
+The server only listens on `127.0.0.1`, requires a one-time link, rejects
+foreign `Host` headers and cross-site requests, locks itself after 5 minutes of
+inactivity, and the page loads nothing from the internet.
 
 ## How it works
 
@@ -83,7 +72,7 @@ Changing the master password generates a new salt and re-encrypts the vault.
 
 - Unaudited; see the note at the top.
 - Secrets live in Python strings and cannot be reliably wiped from memory.
-- No clipboard integration, sync, or backup; losing the master password means
+- No sync or backup; losing the master password means
   losing the vault.
 - Anyone who obtains the vault file can attempt offline guesses of the master
   password; choose a strong one.

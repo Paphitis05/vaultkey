@@ -115,7 +115,7 @@ def make_handler(state: State, port_getter):
                     "exists": state.path.exists(), "unlocked": state.current() is not None,
                     "path": str(state.path),
                 })
-            self._json(HTTPStatus.FORBIDDEN, {"error": "open the link printed by 'vaultkey ui'"})
+            self._json(HTTPStatus.FORBIDDEN, {"error": "open the link printed by vaultkey"})
 
         def do_POST(self):
             if not self._host_ok() or not self._authed():
@@ -198,7 +198,7 @@ def serve(path: Path, port: int = 0, open_browser: bool = True, idle: int = IDLE
     httpd = ThreadingHTTPServer(("127.0.0.1", port), None)
     httpd.RequestHandlerClass = make_handler(state, lambda: httpd.server_address[1])
     url = f"http://127.0.0.1:{httpd.server_address[1]}/?t={state.token}"
-    print(f"vaultkey UI running for {path}")
+    print(f"vaultkey running for {path}")
     print(f"Open this one-time link: {url}")
     print("Press Ctrl+C to stop.")
     if open_browser:

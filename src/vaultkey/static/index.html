@@ -96,7 +96,7 @@ function field(label, input) { return [el("label", { textContent: label }), inpu
 
 async function refresh() {
   try { st = await api("/api/state"); }
-  catch { document.body.textContent = "Open the one-time link printed by `vaultkey ui` in your terminal."; return; }
+  catch { document.body.textContent = "Open the one-time link printed when you started vaultkey."; return; }
   $("v-auth").classList.toggle("hide", st.unlocked);
   $("v-vault").classList.toggle("hide", !st.unlocked);
   $("topbar").hidden = !st.unlocked;
