@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vaultkey</title>
+<style>
+  :root { --bg:#f5f6f8; --card:#fff; --fg:#1b1f24; --mut:#6b7280; --line:#e2e5ea; --acc:#2f5bea; --bad:#c62828; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#14161a; --card:#1d2026; --fg:#e8eaed; --mut:#9aa0a8; --line:#2c3038; --acc:#6b8cff; --bad:#ff6b6b; } }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.4 system-ui,sans-serif; background:var(--bg); color:var(--fg); }
+  header { display:flex; align-items:center; justify-content:space-between; padding:12px 20px; background:var(--card); border-bottom:1px solid var(--line); }
+  header h1 { font-size:17px; margin:0; }
+  main { max-width:880px; margin:24px auto; padding:0 16px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:20px; }
+  .narrow { max-width:380px; margin:12vh auto 0; }
+  label { display:block; font-size:13px; color:var(--mut); margin:12px 0 4px; }
+  input, textarea { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:6px; background:var(--bg); color:var(--fg); font:inherit; }
+  button { padding:8px 14px; border:1px solid var(--line); border-radius:6px; background:var(--card); color:var(--fg); font:inherit; cursor:pointer; }
+  button.primary { background:var(--acc); border-color:var(--acc); color:#fff; }
+  button.danger { color:var(--bad); }
+  .row { display:flex; gap:8px; align-items:center; }
+  .row > input { flex:1; }
+  .grid { display:grid; grid-template-columns:260px 1fr; gap:16px; }
+  @media (max-width:640px) { .grid { grid-template-columns:1fr; } }
+  ul { list-style:none; margin:8px 0 0; padding:0; max-height:60vh; overflow:auto; }
+  li { padding:8px 10px; border-radius:6px; cursor:pointer; }
+  li:hover { background:var(--bg); } li.sel { background:var(--acc); color:#fff; }
+  .err { color:var(--bad); min-height:1.2em; margin-top:10px; font-size:13px; }
+  .mut { color:var(--mut); font-size:13px; }
+  .actions { display:flex; gap:8px; margin-top:16px; flex-wrap:wrap; }
+  .hide { display:none !important; }
+  .opts { display:flex; gap:14px; flex-wrap:wrap; margin-top:8px; font-size:13px; }
+  .opts label { display:flex; gap:5px; align-items:center; margin:0; color:var(--fg); }
+  .opts input { width:auto; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🔐 vaultkey</h1>
+  <div class="row" id="topbar" hidden>
+    <button id="btn-passwd">Change master password</button>
+    <button id="btn-lock">Lock</button>
+  </div>
+</header>
+<main>
+  <!-- unlock / init -->
+  <section id="v-auth" class="card narrow hide">
+    <h2 id="auth-title" style="margin-top:0"></h2>
+    <p class="mut" id="auth-path"></p>
+    <label for="auth-pw">Master password</label>
+    <input id="auth-pw" type="password" autocomplete="off">
+    <div id="auth-confirm-wrap" class="hide">
+      <label for="auth-pw2">Repeat master password (min 12 characters)</label>
+      <input id="auth-pw2" type="password" autocomplete="off">
+    </div>
+    <div class="err" id="auth-err"></div>
+    <div class="actions"><button class="primary" id="auth-go"></button></div>
+  </section>
+
+  <!-- vault -->
+  <section id="v-vault" class="grid hide">
+    <div class="card">
+      <div class="row"><input id="search" placeholder="Search…"><button id="btn-new">+</button></div>
+      <ul id="list"></ul>
+    </div>
+    <div class="card" id="detail"></div>
+  </section>
+</main>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+let entries = [], selected = null, st = {};
+
+async function api(route, body) {
+  const opts = body === undefined
+    ? {}
+    : { method: "POST", headers: { "X-Vaultkey": "1", "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  const res = await fetch(route, opts);
+  const data = await res.json().catch(() => ({}));
+  if (res.status === 401 && data.error === "vault is locked") { await refresh(); throw new Error("Vault locked (idle timeout)."); }
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+function el(tag, props = {}, ...kids) {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(props)) {
+    if (k.startsWith("on")) n.addEventListener(k.slice(2), v); else n[k] = v;
+  }
+  n.append(...kids);
+  return n;
+}
+function field(label, input) { return [el("label", { textContent: label }), input]; }
+
+async function refresh() {
+  try { st = await api("/api/state"); }
+  catch { document.body.textContent = "Open the one-time link printed by `vaultkey ui` in your terminal."; return; }
+  $("v-auth").classList.toggle("hide", st.unlocked);
+  $("v-vault").classList.toggle("hide", !st.unlocked);
+  $("topbar").hidden = !st.unlocked;
+  if (st.unlocked) { await loadEntries(); return; }
+  $("auth-title").textContent = st.exists ? "Unlock vault" : "Create vault";
+  $("auth-path").textContent = st.path;
+  $("auth-go").textContent = st.exists ? "Unlock" : "Create";
+  $("auth-confirm-wrap").classList.toggle("hide", st.exists);
+  $("auth-pw").value = $("auth-pw2").value = ""; $("auth-err").textContent = "";
+  $("auth-pw").focus();
+}
+
+async function auth() {
+  const pw = $("auth-pw").value;
+  try {
+    if (!st.exists) {
+      if (pw !== $("auth-pw2").value) throw new Error("Passwords do not match.");
+      await api("/api/init", { password: pw });
+    } else await api("/api/unlock", { password: pw });
+    selected = null; await refresh();
+  } catch (e) { $("auth-err").textContent = e.message; }
+}
+
+async function loadEntries() {
+  entries = (await api("/api/entries", {})).entries;
+  renderList();
+  selected && entries.includes(selected) ? showEntry(selected) : showEmpty();
+}
+
+function renderList() {
+  const q = $("search").value.toLowerCase();
+  const ul = $("list"); ul.replaceChildren();
+  for (const name of entries.filter((n) => n.toLowerCase().includes(q))) {
+    ul.append(el("li", { textContent: name, className: name === selected ? "sel" : "", onclick: () => showEntry(name) }));
+  }
+}
+
+function showEmpty() {
+  selected = null; renderList();
+  $("detail").replaceChildren(el("p", { className: "mut", textContent: entries.length ? "Select an entry, or press + to add one." : "No entries yet. Press + to add your first." }));
+}
+
+async function showEntry(name) {
+  selected = name; renderList();
+  const { entry } = await api("/api/get", { name });
+  const pw = el("input", { type: "password", readOnly: true, value: entry.password });
+  const reveal = el("button", { textContent: "Show", onclick: () => { const h = pw.type === "password"; pw.type = h ? "text" : "password"; reveal.textContent = h ? "Hide" : "Show"; } });
+  const copy = el("button", { textContent: "Copy", onclick: async () => {
+    await navigator.clipboard.writeText(entry.password); copy.textContent = "Copied (clears in 20s)";
+    setTimeout(async () => { try { if ((await navigator.clipboard.readText()) === entry.password) await navigator.clipboard.writeText(""); } catch {} copy.textContent = "Copy"; }, 20000);
+  } });
+  const extra = [];
+  for (const [k, label] of [["username", "Username"], ["url", "URL"], ["notes", "Notes"]]) {
+    if (entry[k]) extra.push(...field(label, el("div", { textContent: entry[k], style: "white-space:pre-wrap" })));
+  }
+  $("detail").replaceChildren(
+    el("h2", { textContent: name, style: "margin-top:0" }), ...extra,
+    ...field("Password", el("div", { className: "row" }, pw, reveal, copy)),
+    el("div", { className: "actions" },
+      el("button", { textContent: "Edit", onclick: () => editForm(name, entry) }),
+      el("button", { className: "danger", textContent: "Delete", onclick: async () => {
+        if (!confirm(`Delete "${name}"?`)) return;
+        await api("/api/remove", { name }); selected = null; await loadEntries();
+      } })));
+}
+
+function editForm(name, entry) {
+  const isNew = name === null;
+  const f = {
+    name: el("input", { value: name || "", readOnly: !isNew }),
+    username: el("input", { value: entry?.username || "" }),
+    url: el("input", { value: entry?.url || "" }),
+    password: el("input", { type: "text", value: entry?.password || "", autocomplete: "off" }),
+    notes: el("textarea", { rows: 3, value: entry?.notes || "" }),
+  };
+  const len = el("input", { type: "number", min: 8, max: 128, value: 20, style: "width:70px" });
+  const sym = el("input", { type: "checkbox", checked: true }), amb = el("input", { type: "checkbox" });
+  const err = el("div", { className: "err" });
+  const gen = el("button", { textContent: "Generate", onclick: async () => {
+    try { f.password.value = (await api("/api/generate", { length: +len.value, symbols: sym.checked, noAmbiguous: amb.checked })).password; err.textContent = ""; }
+    catch (e) { err.textContent = e.message; }
+  } });
+  $("detail").replaceChildren(
+    el("h2", { textContent: isNew ? "New entry" : `Edit ${name}`, style: "margin-top:0" }),
+    ...field("Name", f.name), ...field("Username", f.username), ...field("URL", f.url),
+    ...field("Password", el("div", { className: "row" }, f.password, gen)),
+    el("div", { className: "opts" }, el("label", {}, "Length ", len), el("label", {}, sym, "Symbols"), el("label", {}, amb, "No ambiguous")),
+    ...field("Notes", f.notes), err,
+    el("div", { className: "actions" },
+      el("button", { className: "primary", textContent: "Save", onclick: async () => {
+        try {
+          await api("/api/add", { name: f.name.value, username: f.username.value, url: f.url.value, password: f.password.value, notes: f.notes.value, overwrite: !isNew });
+          selected = f.name.value; await loadEntries();
+        } catch (e) { err.textContent = e.message; }
+      } }),
+      el("button", { textContent: "Cancel", onclick: () => (selected && !isNew ? showEntry(selected) : showEmpty()) })));
+  f[isNew ? "name" : "password"].focus();
+}
+
+function passwdForm() {
+  const a = el("input", { type: "password" }), b = el("input", { type: "password" }), err = el("div", { className: "err" });
+  $("detail").replaceChildren(
+    el("h2", { textContent: "Change master password", style: "margin-top:0" }),
+    ...field("New master password (min 12 characters)", a), ...field("Repeat", b), err,
+    el("div", { className: "actions" },
+      el("button", { className: "primary", textContent: "Change", onclick: async () => {
+        try {
+          if (a.value !== b.value) throw new Error("Passwords do not match.");
+          await api("/api/passwd", { password: a.value }); selected ? showEntry(selected) : showEmpty();
+        } catch (e) { err.textContent = e.message; }
+      } }),
+      el("button", { textContent: "Cancel", onclick: () => (selected ? showEntry(selected) : showEmpty()) })));
+  a.focus();
+}
+
+$("auth-go").onclick = auth;
+for (const id of ["auth-pw", "auth-pw2"]) $(id).addEventListener("keydown", (e) => e.key === "Enter" && auth());
+$("search").oninput = renderList;
+$("btn-new").onclick = () => editForm(null, null);
+$("btn-passwd").onclick = passwdForm;
+$("btn-lock").onclick = async () => { await api("/api/lock", {}); selected = null; await refresh(); };
+refresh();
+</script>
+</body>
+</html>

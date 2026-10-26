@@ -13,6 +13,7 @@ A small, local, encrypted password manager for the command line.
 - Wrong passwords and tampered files are detected and reported clearly
 - Atomic writes with `0600` file permissions
 - Built-in secure password generator
+- Local web interface (`vaultkey ui`) alongside the CLI
 - No network access, no daemon, no telemetry
 
 ## Install
@@ -42,6 +43,20 @@ vaultkey rm github
 vaultkey passwd                       # change the master password
 vaultkey gen --length 32 --no-ambiguous
 ```
+
+### Web interface
+
+```sh
+vaultkey ui              # starts a server on 127.0.0.1 and opens your browser
+vaultkey ui --no-browser --port 8765
+```
+
+The UI lets you create or unlock the vault, search, add, edit and delete
+entries, generate passwords, copy a password (the clipboard is cleared after
+20 seconds if it still holds it), and change the master password. It only
+listens on `127.0.0.1`, requires a one-time link printed in the terminal,
+rejects foreign `Host` headers and cross-site requests, and locks itself after
+5 minutes of inactivity. The page uses no external resources.
 
 The vault location is chosen in this order: `--vault PATH`, the
 `VAULTKEY_PATH` environment variable, then `~/.vaultkey/vault.json`.

@@ -88,6 +88,13 @@ def cmd_gen(args) -> int:
     return 0
 
 
+def cmd_ui(args) -> int:
+    from . import ui
+
+    path = vault_path(args.vault)
+    return ui.serve(path, port=args.port, open_browser=not args.no_browser)
+
+
 def _gen_options(p) -> None:
     p.add_argument("--length", type=int, default=20, help="password length (default 20)")
     p.add_argument("--no-symbols", action="store_true", help="exclude symbols")
@@ -125,6 +132,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=cmd_rm)
 
     sub.add_parser("passwd", help="change the master password").set_defaults(func=cmd_passwd)
+
+    p = sub.add_parser("ui", help="open the local web interface")
+    p.add_argument("--port", type=int, default=0, help="port on 127.0.0.1 (default: random)")
+    p.add_argument("--no-browser", action="store_true", help="only print the link")
+    p.set_defaults(func=cmd_ui)
 
     p = sub.add_parser("gen", help="generate a password")
     _gen_options(p)
